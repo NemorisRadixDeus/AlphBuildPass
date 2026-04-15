@@ -1,0 +1,385 @@
+{
+  "info": {
+    "name": "Диплом_PasswordManager",
+    "description": "Менеджер паролей — API тесты для дипломного проекта",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" },
+    { "key": "entryId", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "1. Регистрация",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"masterPassword\": \"SuperSecret123!\",\n  \"kdfAlgorithm\": \"Argon2id\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Регистрация — код 201', function () {",
+                "    pm.response.to.have.status(201);",
+                "});",
+                "",
+                "pm.test('Ответ содержит id пользователя', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json).to.have.property('id');",
+                "    pm.expect(json).to.have.property('email');",
+                "    pm.collectionVariables.set('userId', json.id);",
+                "});",
+                "",
+                "pm.test('Email совпадает с отправленным', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.email).to.eql('test@example.com');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2. Регистрация дубликата (ошибка)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"masterPassword\": \"AnotherPass456!\",\n  \"kdfAlgorithm\": \"Argon2id\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Дубликат email — код 409 Conflict', function () {",
+                "    pm.response.to.have.status(409);",
+                "});",
+                "",
+                "pm.test('Сообщение об ошибке', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json).to.have.property('error');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "3. Логин (успешный)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"masterPassword\": \"SuperSecret123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Логин — код 200', function () {",
+                "    pm.response.to.have.status(200);",
+                "});",
+                "",
+                "pm.test('Ответ содержит JWT-токен', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json).to.have.property('token');",
+                "    pm.expect(json.token).to.be.a('string');",
+                "    pm.expect(json.token.length).to.be.greaterThan(50);",
+                "    pm.collectionVariables.set('token', json.token);",
+                "});",
+                "",
+                "pm.test('Токен — валидный JWT (3 части через точку)', function () {",
+                "    var json = pm.response.json();",
+                "    var parts = json.token.split('.');",
+                "    pm.expect(parts.length).to.eql(3);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "4. Логин неверный пароль (ошибка)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"masterPassword\": \"WrongPassword!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Неверный пароль — код 401', function () {",
+                "    pm.response.to.have.status(401);",
+                "});",
+                "",
+                "pm.test('Сообщение об ошибке', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json).to.have.property('error');",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "Vault",
+      "item": [
+        {
+          "name": "5. Добавить запись (AES)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"github.com\",\n  \"login\": \"mylogin\",\n  \"password\": \"MyGitHubPass123!\",\n  \"encryptionAlgo\": \"AES-256-GCM\",\n  \"notes\": \"Рабочий аккаунт\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/vault", "host": ["{{baseUrl}}"], "path": ["api", "vault"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Запись создана — код 201', function () {",
+                "    pm.response.to.have.status(201);",
+                "});",
+                "",
+                "pm.test('Алгоритм шифрования — AES-256-GCM', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.encryptionAlgo).to.eql('AES-256-GCM');",
+                "    pm.collectionVariables.set('entryId', json.id);",
+                "});",
+                "",
+                "pm.test('Данные совпадают с отправленными', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.siteName).to.eql('github.com');",
+                "    pm.expect(json.login).to.eql('mylogin');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "6. Добавить запись (ChaCha20)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"gmail.com\",\n  \"login\": \"test@gmail.com\",\n  \"password\": \"GmailSecure789!\",\n  \"encryptionAlgo\": \"ChaCha20-Poly1305\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/vault", "host": ["{{baseUrl}}"], "path": ["api", "vault"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Запись создана — код 201', function () {",
+                "    pm.response.to.have.status(201);",
+                "});",
+                "",
+                "pm.test('Алгоритм шифрования — ChaCha20-Poly1305', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.encryptionAlgo).to.eql('ChaCha20-Poly1305');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "7. Получить все записи",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/vault", "host": ["{{baseUrl}}"], "path": ["api", "vault"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Список получен — код 200', function () {",
+                "    pm.response.to.have.status(200);",
+                "});",
+                "",
+                "pm.test('Ответ — массив записей', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json).to.be.an('array');",
+                "    pm.expect(json.length).to.be.greaterThan(0);",
+                "});",
+                "",
+                "pm.test('Каждая запись имеет нужные поля', function () {",
+                "    var json = pm.response.json();",
+                "    json.forEach(function(entry) {",
+                "        pm.expect(entry).to.have.property('id');",
+                "        pm.expect(entry).to.have.property('siteName');",
+                "        pm.expect(entry).to.have.property('login');",
+                "        pm.expect(entry).to.have.property('encryptionAlgo');",
+                "    });",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "8. Поиск записей",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/vault?search=github",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "vault"],
+              "query": [{ "key": "search", "value": "github" }]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Поиск работает — код 200', function () {",
+                "    pm.response.to.have.status(200);",
+                "});",
+                "",
+                "pm.test('Найдена запись github.com', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.length).to.be.greaterThan(0);",
+                "    pm.expect(json[0].siteName).to.include('github');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "9. Удалить запись",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/vault/{{entryId}}", "host": ["{{baseUrl}}"], "path": ["api", "vault", "{{entryId}}"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Запись удалена — код 204', function () {",
+                "    pm.response.to.have.status(204);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "10. Без токена — 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/vault", "host": ["{{baseUrl}}"], "path": ["api", "vault"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Без JWT — код 401 Unauthorized', function () {",
+                "    pm.response.to.have.status(401);",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "Generator",
+      "item": [
+        {
+          "name": "11. Генерация пароля (POST)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"length\": 24,\n  \"includeUppercase\": true,\n  \"includeLowercase\": true,\n  \"includeDigits\": true,\n  \"includeSpecial\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/generator", "host": ["{{baseUrl}}"], "path": ["api", "generator"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Генерация — код 200', function () {",
+                "    pm.response.to.have.status(200);",
+                "});",
+                "",
+                "pm.test('Пароль нужной длины', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.password.length).to.eql(24);",
+                "});",
+                "",
+                "pm.test('Есть оценка энтропии', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.entropyBits).to.be.greaterThan(0);",
+                "    pm.expect(json).to.have.property('strength');",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "12. Быстрая генерация (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/generator/quick?length=32&special=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "generator", "quick"],
+              "query": [
+                { "key": "length", "value": "32" },
+                { "key": "special", "value": "false" }
+              ]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Быстрая генерация — код 200', function () {",
+                "    pm.response.to.have.status(200);",
+                "});",
+                "",
+                "pm.test('Пароль 32 символа без спецсимволов', function () {",
+                "    var json = pm.response.json();",
+                "    pm.expect(json.password.length).to.eql(32);",
+                "    pm.expect(json.password).to.match(/^[A-Za-z0-9]+$/);",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}
